@@ -127,11 +127,33 @@ tbody tr:last-child td { border-bottom: none; }
   display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 11px; border-radius: 20px;
   border: 1px solid transparent; white-space: nowrap;
 }
-.b-Pending  { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-br); }
-.b-Approved { color: var(--green); background: var(--green-bg); border-color: var(--green-br); }
-.b-Denied   { color: var(--red);   background: var(--red-bg);   border-color: var(--red-br); }
-.b-InReview { color: var(--blue);  background: var(--blue-bg);  border-color: var(--blue-br); }
-.b-Closed   { color: var(--gray);  background: var(--gray-bg);  border-color: var(--gray-br); }
+/* Deposit statuses */
+.b-Received         { color: var(--blue);  background: var(--blue-bg);  border-color: var(--blue-br); }
+.b-Processing       { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-br); }
+.b-Completed        { color: var(--green); background: var(--green-bg); border-color: var(--green-br); }
+.b-RejectedReturned { color: var(--red);   background: var(--red-bg);   border-color: var(--red-br); }
+/* Case statuses */
+.b-Open       { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-br); }
+.b-InProgress { color: var(--blue);  background: var(--blue-bg);  border-color: var(--blue-br); }
+.b-Resolved   { color: var(--green); background: var(--green-bg); border-color: var(--green-br); }
+
+/* Priority text */
+.pri-Urgent { color: var(--red);   font-weight: 700; }
+.pri-High   { color: var(--amber); font-weight: 700; }
+.pri-Standard { color: var(--ink-soft); }
+
+/* inline primary button (e.g. New Case) */
+.btn-inline { width: auto; margin-top: 0; padding: 8px 14px; font-size: 13px; }
+
+/* new case form */
+.form-view { max-width: 640px; }
+.form-actions { display: flex; gap: 10px; margin-top: 6px; }
+.form-actions .btn-primary { width: auto; margin-top: 0; }
+.field input, .field select {
+  font: inherit; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink);
+}
+.field input:focus, .field select:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(27,42,78,.12); }
+.req { color: var(--red); }
 
 /* ===== Detail view ===== */
 .detail-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
