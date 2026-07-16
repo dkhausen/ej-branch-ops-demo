@@ -1,9 +1,9 @@
 /* Branch Operations Portal (demo).
    Deposit/wire status + case follow-up. All data fictitious.
-   State persists in localStorage so agent actions are live. */
+   State is stored in Supabase (Postgres) so changes are shared across everyone
+   who opens the URL, with live updates via Supabase Realtime. */
 
-const DEP_KEY = "jdf_deposits_v1";
-const CASE_KEY = "jdf_cases_v1";
+const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 
 const TEAM = [
   { name: "Jane Doe", role: "Branch Ops Associate" },
@@ -57,29 +57,72 @@ const CASE_SEED = [
     notes: [{ author: "Tom Becker", date: "Jul 12, 2026", text: "Duplicate inquiry — no action required. Resolved." }] }
 ];
 
-// ---- store ----
-function load(key, seed) {
-  try { const raw = localStorage.getItem(key); if (raw) return JSON.parse(raw); } catch (e) {}
-  localStorage.setItem(key, JSON.stringify(seed));
-  return JSON.parse(JSON.stringify(seed));
+// ---- in-memory cache (hydrated from Supabase) ----
+let DEPOSITS = [];
+let CASES = [];
+const mapDep = r => ({ ...r, amount: Number(r.amount), notes: r.notes || [], lastUpdated: r.last_updated });
+const mapCase = r => ({ ...r, notes: r.notes || [], lastUpdated: r.last_updated });
+const loadDeposits = () => DEPOSITS;
+const loadCases = () => CASES;
+
+async function refresh() {
+  const [d, c] = await Promise.all([
+    sb.from("deposits").select("*").order("seq", { ascending: true }),
+    sb.from("cases").select("*").order("created_at", { ascending: false })
+  ]);
+  if (d.error) throw d.error;
+  if (c.error) throw c.error;
+  DEPOSITS = d.data.map(mapDep);
+  CASES = c.data.map(mapCase);
 }
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-const loadDeposits = () => load(DEP_KEY, DEP_SEED);
-const loadCases = () => load(CASE_KEY, CASE_SEED);
-function updateRecord(key, id, patch) {
-  const all = load(key, key === DEP_KEY ? DEP_SEED : CASE_SEED);
-  const r = all.find(x => x.id === id);
-  if (!r) return;
-  Object.assign(r, patch, { lastUpdated: todayLabel() });
-  save(key, all);
+
+async function seedIfEmpty() {
+  if (DEPOSITS.length === 0) {
+    const rows = DEP_SEED.map((d, i) => ({
+      id: d.id, seq: i, client: d.client, account: d.account, method: d.method, amount: d.amount,
+      date: d.date, last_updated: d.lastUpdated, status: d.status, assignee: d.assignee,
+      timeline: d.timeline, notes: d.notes
+    }));
+    const { error } = await sb.from("deposits").insert(rows);
+    if (error) throw error;
+  }
+  if (CASES.length === 0) {
+    const base = Date.parse("2026-07-10T00:00:00Z");
+    const rows = CASE_SEED.map((c, i) => ({
+      id: c.id, account: c.account, reference: c.reference, type: c.type, priority: c.priority,
+      status: c.status, opened: c.opened, last_updated: c.lastUpdated, assignee: c.assignee,
+      notes: c.notes, created_at: new Date(base + i * 3600000).toISOString()
+    }));
+    const { error } = await sb.from("cases").insert(rows);
+    if (error) throw error;
+  }
 }
-function addNote(key, id, text) {
-  const all = load(key, key === DEP_KEY ? DEP_SEED : CASE_SEED);
-  const r = all.find(x => x.id === id);
-  if (!r) return;
-  r.notes = r.notes.concat([{ author: "Jane Doe", date: todayLabel(), text }]);
-  r.lastUpdated = todayLabel();
-  save(key, all);
+
+// ---- mutations ----
+async function patchRecord(table, id, patch) {
+  patch.last_updated = todayLabel();
+  const { error } = await sb.from(table).update(patch).eq("id", id);
+  if (error) return alert("Save failed: " + error.message);
+  await refresh();
+  router();
+}
+async function addNoteRecord(table, id, text) {
+  const rec = (table === "deposits" ? DEPOSITS : CASES).find(x => x.id === id);
+  const notes = (rec.notes || []).concat([{ author: "Jane Doe", date: todayLabel(), text }]);
+  const { error } = await sb.from(table).update({ notes, last_updated: todayLabel() }).eq("id", id);
+  if (error) return alert("Save failed: " + error.message);
+  await refresh();
+  router();
+}
+async function resetDemo() {
+  if (!confirm("Reset all demo data back to the seeded state? This affects everyone using the demo.")) return;
+  await sb.from("cases").delete().neq("id", "");
+  await sb.from("deposits").delete().neq("id", "");
+  DEPOSITS = []; CASES = [];
+  await seedIfEmpty();
+  await refresh();
+  location.hash = "#/dashboard";
+  router();
 }
 
 // ---- helpers ----
@@ -122,7 +165,8 @@ function renderDashboard() {
 
   view.innerHTML = `
     <h1 class="page-title">Branch Operations Support</h1>
-    <p class="page-sub">Deposit &amp; wire status and case follow-up at a glance.</p>
+    <p class="page-sub">Deposit &amp; wire status and case follow-up at a glance.
+      <a href="#" id="reset-demo" style="font-size:13px;font-weight:600;color:var(--ink-soft);margin-left:6px">↺ Reset demo data</a></p>
     <div class="stats">
       ${statCard("Total Deposits", deps.length, ICON.deposits)}
       ${statCard("Processing", processing, ICON.clock)}
@@ -149,6 +193,7 @@ function renderDashboard() {
         </table>
       </div>
     </div>`;
+  document.getElementById("reset-demo").addEventListener("click", e => { e.preventDefault(); resetDemo(); });
   wireRowClicks();
 }
 
@@ -278,11 +323,19 @@ function renderDepositDetail(id) {
       </div>
     </div>`;
 
-  document.getElementById("sel-status").addEventListener("change", e => { updateRecord(DEP_KEY, id, { status: e.target.value }); renderDepositDetail(id); });
-  document.getElementById("sel-assignee").addEventListener("change", e => { updateRecord(DEP_KEY, id, { assignee: e.target.value }); renderDepositDetail(id); });
-  document.getElementById("btn-complete").addEventListener("click", () => { if (isCompleted) return; updateRecord(DEP_KEY, id, { status: "Completed" }); addNote(DEP_KEY, id, "Marked completed by Jane Doe."); renderDepositDetail(id); });
-  document.getElementById("btn-route").addEventListener("click", () => { if (routed) return; updateRecord(DEP_KEY, id, { assignee: "Deposit Operations" }); addNote(DEP_KEY, id, "Routed to Deposit Operations for follow-up."); renderDepositDetail(id); });
-  bindAddNote(DEP_KEY, id, renderDepositDetail);
+  document.getElementById("sel-status").addEventListener("change", e => patchRecord("deposits", id, { status: e.target.value }));
+  document.getElementById("sel-assignee").addEventListener("change", e => patchRecord("deposits", id, { assignee: e.target.value }));
+  document.getElementById("btn-complete").addEventListener("click", async () => {
+    if (isCompleted) return;
+    await sb.from("deposits").update({ status: "Completed", last_updated: todayLabel() }).eq("id", id);
+    await addNoteRecord("deposits", id, "Marked completed by Jane Doe.");
+  });
+  document.getElementById("btn-route").addEventListener("click", async () => {
+    if (routed) return;
+    await sb.from("deposits").update({ assignee: "Deposit Operations", last_updated: todayLabel() }).eq("id", id);
+    await addNoteRecord("deposits", id, "Routed to Deposit Operations for follow-up.");
+  });
+  bindAddNote("deposits", id);
 }
 
 // ================= CASES LIST =================
@@ -349,8 +402,7 @@ function renderCaseRows() {
 
 // ================= NEW CASE =================
 function nextCaseId() {
-  const cases = loadCases();
-  const max = cases.reduce((m, c) => Math.max(m, parseInt(c.id.replace(/\D/g, ""), 10) || 0), 2600);
+  const max = loadCases().reduce((m, c) => Math.max(m, parseInt(c.id.replace(/\D/g, ""), 10) || 0), 2600);
   return "CASE-" + (max + 1);
 }
 function renderNewCase() {
@@ -378,23 +430,23 @@ function renderNewCase() {
         <a href="#/cases" class="btn">Cancel</a>
       </div>
     </div>`;
-  document.getElementById("nc-create").addEventListener("click", () => {
+  document.getElementById("nc-create").addEventListener("click", async () => {
     const account = document.getElementById("nc-account").value.trim();
     if (!account) { document.getElementById("nc-error").style.display = "block"; return; }
-    const cases = loadCases();
     const id = nextCaseId();
     const notes = [];
     const noteText = document.getElementById("nc-notes").value.trim();
     if (noteText) notes.push({ author: "Jane Doe", date: todayLabel(), text: noteText });
-    cases.unshift({
+    const { error } = await sb.from("cases").insert({
       id, account,
       reference: document.getElementById("nc-ref").value.trim() || "—",
       type: document.getElementById("nc-type").value,
       priority: document.getElementById("nc-priority").value,
-      status: "Open", opened: todayLabel(), lastUpdated: todayLabel(),
+      status: "Open", opened: todayLabel(), last_updated: todayLabel(),
       assignee: "Unassigned", notes
     });
-    save(CASE_KEY, cases);
+    if (error) return alert("Create failed: " + error.message);
+    await refresh();
     location.hash = "#/cases/" + id;
   });
 }
@@ -464,12 +516,20 @@ function renderCaseDetail(id) {
       </div>
     </div>`;
 
-  document.getElementById("sel-status").addEventListener("change", e => { updateRecord(CASE_KEY, id, { status: e.target.value }); renderCaseDetail(id); });
-  document.getElementById("sel-priority").addEventListener("change", e => { updateRecord(CASE_KEY, id, { priority: e.target.value }); renderCaseDetail(id); });
-  document.getElementById("sel-assignee").addEventListener("change", e => { updateRecord(CASE_KEY, id, { assignee: e.target.value }); renderCaseDetail(id); });
-  document.getElementById("btn-resolve").addEventListener("click", () => { if (resolved) return; updateRecord(CASE_KEY, id, { status: "Resolved" }); addNote(CASE_KEY, id, "Case marked resolved by Jane Doe."); renderCaseDetail(id); });
-  document.getElementById("btn-escalate").addEventListener("click", () => { if (urgent) return; updateRecord(CASE_KEY, id, { priority: "Urgent" }); addNote(CASE_KEY, id, "Case escalated to Urgent priority."); renderCaseDetail(id); });
-  bindAddNote(CASE_KEY, id, renderCaseDetail);
+  document.getElementById("sel-status").addEventListener("change", e => patchRecord("cases", id, { status: e.target.value }));
+  document.getElementById("sel-priority").addEventListener("change", e => patchRecord("cases", id, { priority: e.target.value }));
+  document.getElementById("sel-assignee").addEventListener("change", e => patchRecord("cases", id, { assignee: e.target.value }));
+  document.getElementById("btn-resolve").addEventListener("click", async () => {
+    if (resolved) return;
+    await sb.from("cases").update({ status: "Resolved", last_updated: todayLabel() }).eq("id", id);
+    await addNoteRecord("cases", id, "Case marked resolved by Jane Doe.");
+  });
+  document.getElementById("btn-escalate").addEventListener("click", async () => {
+    if (urgent) return;
+    await sb.from("cases").update({ priority: "Urgent", last_updated: todayLabel() }).eq("id", id);
+    await addNoteRecord("cases", id, "Case escalated to Urgent priority.");
+  });
+  bindAddNote("cases", id);
 }
 
 // ================= TEAM =================
@@ -505,13 +565,11 @@ function renderNotes(notes) {
       </div>
     </div>`).join("");
 }
-function bindAddNote(key, id, rerender) {
+function bindAddNote(table, id) {
   document.getElementById("btn-add-note").addEventListener("click", () => {
-    const input = document.getElementById("note-input");
-    const text = input.value.trim();
+    const text = document.getElementById("note-input").value.trim();
     if (!text) return;
-    addNote(key, id, text);
-    rerender(id);
+    addNoteRecord(table, id, text);
   });
 }
 function wireRowClicks() {
@@ -535,6 +593,33 @@ function router() {
   if (hash.startsWith("#/team")) return renderTeam();
   return renderDashboard();
 }
-window.addEventListener("hashchange", router);
-if (!location.hash) location.hash = "#/dashboard";
-router();
+
+// ---- Realtime: refresh + re-render when anyone changes data ----
+let rtTimer;
+function startRealtime() {
+  sb.channel("branch-ops-demo")
+    .on("postgres_changes", { event: "*", schema: "public", table: "deposits" }, onRemoteChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "cases" }, onRemoteChange)
+    .subscribe();
+}
+function onRemoteChange() {
+  clearTimeout(rtTimer);
+  rtTimer = setTimeout(async () => { try { await refresh(); router(); } catch (e) {} }, 300);
+}
+
+// ---- boot ----
+(async () => {
+  view.innerHTML = `<div style="padding:48px;color:var(--ink-soft)">Loading…</div>`;
+  try {
+    await refresh();
+    await seedIfEmpty();
+    if (!DEPOSITS.length || !CASES.length) await refresh();
+    startRealtime();
+    window.addEventListener("hashchange", router);
+    if (!location.hash) location.hash = "#/dashboard";
+    router();
+  } catch (e) {
+    view.innerHTML = `<div style="padding:48px;color:var(--red)">Could not connect to the database.<br><br>${esc(e.message || String(e))}</div>`;
+    console.error(e);
+  }
+})();
