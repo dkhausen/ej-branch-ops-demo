@@ -1,34 +1,32 @@
-# Branch Operations Support — Demo
+# John Doe Financial — Claims Portal (Demo)
 
-A static, single-page mock of an internal Edward Jones **Branch Operations Support** tool, built to demonstrate that an agent can perform real work through **browser actions** — no backend API required.
+A static, single-page mock of a **claims management portal**, built to demonstrate that an agent can do real work through **browser actions** — no backend API required. All data is fictitious; branding is a neutral placeholder ("John Doe Financial").
 
-Modeled on procedure **OPS-TXN-022 (Deposit Status Inquiry)**. All data is fictitious.
+## Views
 
-## What it does
+- **Claims Overview** — stat cards (Total Claims, In Review, Pending Attention, Value In Review) and a live **Active Claims** table with status filters. Click any row to open the claim.
+- **Claim Detail** — Claim Details + Policy Information, plus a Management panel (**Status** and **Assigned To** dropdowns), **Approve / Deny** buttons, and an **Activity & Notes** feed you can post to.
+- **Adjusters** — team roster with current open caseloads.
 
-- **Deposit Status Inquiry** — look up a deposit by account number + reference and read back status, method, amount, and timeline.
-- **Case Management** — open a case for Deposit Operations and advance its status. Cases persist in the browser via `localStorage`.
+All changes (status, assignment, approve/deny, notes) persist in the browser via `localStorage`, so an agent's actions are reflected live across views.
 
-## Seeded deposits (for the demo)
+## Demo script (browser actions)
 
-| Account   | Reference   | Method                 | Amount     | Status              |
-|-----------|-------------|------------------------|------------|---------------------|
-| `8842-01` | `WT-100248` | ACH                    | $12,500.00 | Processing          |
-| `3391-07` | `WT-100311` | Check                  | $4,200.00  | Completed           |
-| `5017-22` | `WT-100355` | Wire                   | $85,000.00 | Received            |
-| `2245-88` | `WT-100199` | Check (out-of-state)   | $1,750.00  | Rejected / Returned |
-| `6620-13` | `WT-100402` | Check (out-of-state)   | $9,300.00  | Processing          |
-
-Look up a deposit with the account number, the reference number, or both.
+1. Open **All Claims** → click claim `LF-2026-004812` (Harold Jensen).
+2. Set **Assigned To** → *Jane Doe*, **Status** → *In Review*, or click **Approve**.
+3. Add a note in **Activity & Notes**.
+4. Return to the overview — the row reflects the new status/assignee, and stat counts update.
 
 ## Running locally
 
-It's fully static — open `index.html` in a browser, or serve the folder:
+Fully static — open `index.html`, or serve the folder:
 
 ```
 python3 -m http.server 8000
 ```
 
+To reset demo data, clear the site's `localStorage` (key `jdf_claims_v3`).
+
 ## Deployment
 
-Published via GitHub Pages from the `main` branch.
+Published via GitHub Pages from `main` → https://dkhausen.github.io/ej-branch-ops-demo/
