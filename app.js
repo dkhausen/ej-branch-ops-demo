@@ -1,4 +1,4 @@
-/* John Doe Financial — Branch Operations Support (demo).
+/* Branch Operations Portal (demo).
    Deposit/wire status + case follow-up. All data fictitious.
    State persists in localStorage so agent actions are live. */
 

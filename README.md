@@ -1,6 +1,6 @@
 # Branch Operations Support — Demo
 
-A static, single-page mock of an internal **Branch Operations Support** tool, built to demonstrate that an agent can do real work through **browser actions** — no backend API required. Modeled on procedure **OPS-TXN-022 (Deposit Status Inquiry)**. All data is fictitious; branding is a neutral placeholder ("John Doe Financial").
+A static, single-page mock of an internal **Branch Operations** tool, built to demonstrate that an agent can do real work through **browser actions** — no backend API required. Modeled on procedure **OPS-TXN-022 (Deposit Status Inquiry)**. All data is fictitious and the branding is intentionally generic.
 
 ## Views
 
